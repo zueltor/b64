@@ -7,11 +7,10 @@
 int main(int argc, char *argv[]) {
 
     if ((argc > 7) || (argc < 4)) {
-        printf("bad input");
+        print_help();
         return 1;
     }
 
     return b64(argv, argc);
-
 
 }

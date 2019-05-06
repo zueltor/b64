@@ -49,122 +49,147 @@ int b64(char **argv, unsigned int n) {
     return 0;
 }
 
-void char_to_ind(unsigned char *buf, unsigned int i) {
-    if (i == 3) {
-        buf[3] = buf[2] & 0x3F;
-        buf[2] = buf[2] >> 6;
-    } else {
-        buf[3] = 64;
-        buf[2] = 0;
+void chars_to_b64(unsigned char *buf_in, unsigned char *buf_out, unsigned int r) {
+    int i = 0,
+            j = 0,
+            k = r;
+    while (k >= 3) {
+        buf_out[i] = buf_in[j] >> 2;
+        buf_out[++i] = ((buf_in[j] << 4) & 0x30) + (buf_in[++j] >> 4);
+        buf_out[++i] = ((buf_in[j] << 2) & 0x3c) + (buf_in[++j] >> 6);
+        buf_out[++i] = buf_in[j] & 0x3F;
+        i++;
+        j++;
+        k -= 3;
     }
-    if (i >= 2) {
-        buf[2] = buf[2] + ((buf[1] << 2) & 0x3C);
-        buf[1] = buf[1] >> 4;
-    } else {
-        buf[2] = 64;
-        buf[1] = 0;
+    if (k >= 1) {
+        buf_out[i] = buf_in[j] >> 2;
+        buf_out[++i] = ((buf_in[j] << 4) & 0x30) + (buf_in[++j] >> 4);
+        buf_out[++i] = '=';
+        buf_out[i + 1] = '=';
     }
-    if (i >= 1) {
-        buf[1] = buf[1] + ((buf[0] << 4) & 0x30);
-        buf[0] = buf[0] >> 2;
+    if (k == 2) {
+        buf_out[i++] = ((buf_in[j] << 2) & 0x3c) + (buf_in[++j] >> 6);
+    }
 
+    for (j = 0; j < i; j++) {
+        if (buf_out[j] < 26)
+            buf_out[j] = buf_out[j] + 'A';
+        else if (buf_out[j] < 52)
+            buf_out[j] = buf_out[j] + 'a' - 26;
+        else if (buf_out[j] < 62)
+            buf_out[j] = buf_out[j] + '0' - 52;
+        else if (buf_out[j] == 62)
+            buf_out[j] = '+';
+        else if (buf_out[j] == 63)
+            buf_out[j] = '/';
+        else if (buf_out[j] == 64)
+            buf_out[j] = '=';
     }
+
 }
 
-unsigned int ind_to_char(unsigned char *buf) {
-    buf[0] = (buf[0] << 2) + (buf[1] >> 4);
-    buf[1] = (buf[1] << 4) + (buf[2] >> 2);
-    buf[2] = (buf[2] << 6) + buf[3];
-    if (buf[2])
-        return 3;
-    if (buf[1])
-        return 2;
-    return 1;
-}
-
-
-void ind_to_b64(unsigned char *buf, unsigned int r) {
-    for (unsigned int i = 0; i <= 3; i++) {
-        if (buf[i] < 26)
-            buf[i] = buf[i] + 'A';
-        else if (buf[i] < 52)
-            buf[i] = buf[i] + 'a' - 26;
-        else if (buf[i] < 62)
-            buf[i] = buf[i] + '0' - 52;
-        else if (buf[i] == 62)
-            buf[i] = '+';
-        else if (buf[i] == 63)
-            buf[i] = '/';
-        else if (buf[i] == 64)
-            buf[i] = '=';
-    }
-}
-
-void b64_to_ind(unsigned char *c) {
-    if ((*c >= 'A') && (*c <= 'Z'))
-        *c = *c - 'A';
-    else if ((*c >= 'a') && (*c <= 'z'))
-        *c = *c - 'a' + 26;
-    else if ((*c >= '0') && (*c <= '9'))
-        *c = *c - '0' + 52;
-    else if (*c == '+')
-        *c = 62;
-    else if (*c == '/')
-        *c = 63;
-    else if (*c == '=')
-        *c = '\0';
-    else *c = 65;
+void f_out(unsigned char *buf, unsigned int space, unsigned int n, FILE *f2, unsigned int mode) {
+    unsigned int i = 0;
+    if (mode == 1)
+        n = (4 - (n % 3) % 4) % 4 + n * 4 / 3;
+    else n = n * 3 / 4;
+    if (space == 0)
+        fwrite(buf, sizeof(char), n, f2);
+    else
+        while (n) {
+            if (n > space) {
+                fwrite(buf + i, sizeof(char), space, f2);
+                i += space;
+                n -= space;
+                fwrite("\n", sizeof(char), 1, f2);
+            } else {
+                fwrite(buf + i, sizeof(char), n, f2);
+                n = 0;
+            }
+        }
 }
 
 void encode(FILE *f1, FILE *f2, unsigned int space) {
-    unsigned char buf[8] = {0};
-    size_t r = 0;
-    unsigned int k = 0;
-    while ((r = fread(buf, sizeof(char), 3, f1)) != 0) {
-        char_to_ind(buf, r);
-        ind_to_b64(buf, r);
-        if (space == 0)
-            fwrite(buf, sizeof(char), 4, f2);
-        else
-            for (unsigned int i = 0; i < 4; i++) {
-                fwrite(buf + i, sizeof(char), 1, f2);
-                k++;
-                if ((k % space) == 0)
-                    fwrite("\n", sizeof(unsigned char), 1, f2);
-            }
-    }
+    unsigned char buf_in[BUF_SIZE * 3] = {0};
+    unsigned char buf_out[BUF_SIZE * 4] = {0};
+    unsigned int r = 0,
+            n = BUF_SIZE * 3;
 
+
+    while ((r = fread(buf_in, sizeof(char), n, f1)) != 0) {
+        chars_to_b64(buf_in, buf_out, r);
+        if (r == n) {
+            f_out(buf_out, space, n, f2, 1);
+            memset(buf_in, 0, n * sizeof(char));
+        } else
+            f_out(buf_out, space, r, f2, 1);
+    }
 }
+
+int b64_to_chars(unsigned char *buf_in, unsigned char *buf_out, unsigned int ign, unsigned int n,
+                 unsigned int *new_length) {
+    unsigned int i = 0, j = 0;
+    while (i < n) {
+        if ((buf_in[i] >= 'A') && (buf_in[i] <= 'Z'))
+            buf_in[j] = buf_in[i] - 'A';
+        else if ((buf_in[i] >= 'a') && (buf_in[i] <= 'z'))
+            buf_in[j] = buf_in[i] - 'a' + 26;
+        else if ((buf_in[i] >= '0') && (buf_in[i] <= '9'))
+            buf_in[j] = buf_in[i] - '0' + 52;
+        else if (buf_in[i] == '+')
+            buf_in[j] = 62;
+        else if (buf_in[i] == '/')
+            buf_in[j] = 63;
+        else if (buf_in[i] == '=')
+            buf_in[j] = '\0';
+        else if (ign) {
+            i++;
+            continue;
+        } else return 1;
+        j++;
+        i++;
+    }
+    i = 0;
+    n = j;
+    j = 0;
+    while (n > 0) {
+        buf_out[i++] = (buf_in[j] << 2) + (buf_in[++j] >> 4);
+        buf_out[i++] = (buf_in[j] << 4) + (buf_in[++j] >> 2);
+        buf_out[i++] = (buf_in[j++] << 6) + buf_in[j++];
+        n -= 4;
+    }
+    if (buf_in[j - 2] == '\0')
+        *new_length = j - 2;
+    else if (buf_in[j - 1] == '\0')
+        *new_length = j - 1;
+    else *new_length = j;
+
+    return 0;
+}
+
 
 unsigned int decode(FILE *f1, FILE *f2, unsigned int ign, unsigned int space) {
     unsigned char buf[8] = {0};
+    unsigned char buf_in[BUF_SIZE * 4];
+    unsigned char buf_out[BUF_SIZE * 3];
     unsigned int k = 0,
             i = 0,
-            j = 0;
-    while (i == 0) {
-        while (i < 4) {
-            if (fread(buf + i, sizeof(unsigned char), 1, f1) != 0) {
-                b64_to_ind(&buf[i]);
-                if (buf[i] < 65)
-                    i++;
-                else if (ign)
-                    continue;
-                else return 1;
+            j = 0,
+            r = 0,
+            n = BUF_SIZE * 4;
 
-            } else return 0;
-        }
-        j = ind_to_char(buf);
-        if (space == 0)
-            fwrite(buf, sizeof(char), j, f2);
-        else
-            for (i = 0; i < j; i++) {
-                fwrite(buf + i, sizeof(char), 1, f2);
-                k++;
-                if ((k % space) == 0)
-                    fwrite("\n", sizeof(unsigned char), 1, f2);
-            }
-        i = 0;
+    while ((r = fread(buf_in, sizeof(char), n, f1)) != 0) {
+        if (b64_to_chars(buf_in, buf_out, ign, r, &k))
+            return 1;
+        if (r == n) {
+            f_out(buf_out, space, k, f2, 0);
+            memset(buf_in, 0, n * sizeof(char));
+        } else
+            f_out(buf_out, space, k, f2, 0);
+
     }
+
 }
 
 void print_help(void) {

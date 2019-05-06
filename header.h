@@ -1,18 +1,16 @@
 #pragma once
+#define BUF_SIZE 1000
 
 int b64(char **argv, unsigned int n);
 
-void char_to_ind(unsigned char *buf, unsigned int i);
+void chars_to_b64(unsigned char *buf_in, unsigned char *buf_out, unsigned int r);
 
-unsigned int ind_to_char(unsigned char *buf);
+void f_out(unsigned char *buf, unsigned int space, unsigned int n, FILE *f2, unsigned int mode);
 
-void ind_to_b64(unsigned char *buf, unsigned int r);
-
-void b64_to_ind(unsigned char *c);
+int
+b64_to_chars(unsigned char *buf_in, unsigned char *buf_out, unsigned int ign, unsigned int n, unsigned int *new_length);
 
 void encode(FILE *f1, FILE *f2, unsigned int space);
-
-void help(void);
 
 unsigned int decode(FILE *f1, FILE *f2, unsigned int ign, unsigned int space);
 
